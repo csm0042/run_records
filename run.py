@@ -44,8 +44,8 @@ def main():
         event_loop.run_until_complete(
             asyncio.gather(
                 #rpihome_v3.update_schedule(cal_credentials, True, logger),
-                run_records.import_runmeter_records(runmeter, logger),
-                run_records.import_tomtom_records(tomtom, logger)
+                run_records.import_runmeter_records(runmeter, database, logger),
+                run_records.import_tomtom_records(tomtom, database, logger)
                 ))
         logger.info('Tasks are started')
     except KeyboardInterrupt:

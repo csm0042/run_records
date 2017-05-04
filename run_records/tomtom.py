@@ -25,7 +25,7 @@ __status__ = "Development"
 
 
 # Main event loop function ****************************************************
-async def import_tomtom_records(folder, logger):
+async def import_tomtom_records(folder, database, logger):
     """ Monitors folder for run capture files to import """
     logger.info('Starting tomtom import script on folder: %s', folder)
     # Set up archive directory for processed files
@@ -43,6 +43,8 @@ async def import_tomtom_records(folder, logger):
     # Import records from found files
     if file_count > 0:
         logger.info('Found [%s] files to import', str(file_count))
+        cursor = database.cursor()
+        # Loop though files
         for file in dir_contents:
             if os.path.isfile(os.path.join(folder, file)):
                 logger.info('Importing records from: [%s]', str(os.path.join(folder, file)))
@@ -50,8 +52,23 @@ async def import_tomtom_records(folder, logger):
                     csvr = csv.reader(csvfile)
                     for row in csvr:
                         logger.debug('Importing: %s', row)
-                logger.info('Moving file [%s] to archive folder after processing', str(os.path.join(folder, file)))
+                        query = ("INSERT INTO run_log "
+                                 "(datetime, activitytype, distance, speed, calories, "
+                                 "latitude, longitude, elevation, heartrate) "
+                                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);")
+                        data = (
+                            row[0], row[1], row[3], row[4], row[5],
+                            row[6], row[7], row[8], row[9])
+                        logger.debug(query % data)
+                        cursor.execute(query, data)
+                # Move file so it's not processed again
+                logger.info(
+                    'Moving file [%s] to archive folder after processing',
+                    str(os.path.join(folder, file)))
                 move_file(file, folder, archive_dir, logger)
+        # Commit changes to database and close connection
+        database.commit()
+        cursor.close()
 
 
 
