@@ -28,17 +28,41 @@ __status__ = "Development"
 # Main event loop function ****************************************************
 async def import_runmeter_records(folder, logger):
     """ Monitors folder for run capture files to import """
-    file_count = 0
+    logger.info('Starting tomtom import script on folder: %s', folder)
+    # Set up archive directory for processed files
+    archive_dir = os.path.join(folder, "archive")
+    logger.info('Setting up archive folder at: %s', archive_dir)
     # Search capture dir for capture files
     dir_contents = os.listdir(folder)
+    logger.info('Found the following in capture folder: %s', dir_contents)
+
     # Count files in found contents (ignore directories)
+    file_count = 0
     for item in dir_contents:
         if os.path.isfile(os.path.join(folder, item)):
             file_count += 1
+    # Import records from found files
     if file_count > 0:
-        logger.debug('Found [%s] files to import', str(file_count))
+        logger.info('Found [%s] files to import', str(file_count))
         for file in dir_contents:
-            with open((os.path.join(folder, file)), newline='') as csvfile:
-                csvr = csv.reader(csvfile)
-                for row in csvr:
-                    print(row)
+            if os.path.isfile(os.path.join(folder, file)):
+                logger.info('Importing records from: [%s]', str(os.path.join(folder, file)))
+                with open((os.path.join(folder, file)), newline='') as csvfile:
+                    csvr = csv.reader(csvfile)
+                    for row in csvr:
+                        logger.debug('Importing: %s', row)
+                logger.info('Moving file [%s] to archive folder after processing', str(os.path.join(folder, file)))
+                move_file(file, folder, archive_dir, logger)
+
+
+
+def move_file(filename, source_dir, dest_dir, logger):
+    try:
+        if os.path.isfile(os.path.join(source_dir, filename)):
+            shutil.move(
+                os.path.join(source_dir, filename),
+                os.path.join(dest_dir, filename)
+                )
+            logger.info('Successfully moved capture file')
+    except:
+        logger.warning('Oh crap, couldn\'t remove the requested file')
