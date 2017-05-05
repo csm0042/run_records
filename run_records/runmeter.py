@@ -10,6 +10,7 @@ import logging
 import mysql.connector
 import mysql.connector.errorcode as errorcode
 import os
+import re
 import shutil
 import run_records
 
@@ -45,24 +46,41 @@ async def import_runmeter_records(folder, database, logger):
     if file_count > 0:
         logger.info('Found [%s] files to import', str(file_count))
         cursor = database.cursor()
-        query = ('INSERT INTO %s (%s) VALUES (%s)')
         # Loop though files
         for file in dir_contents:
             if os.path.isfile(os.path.join(folder, file)):
+                # Extract date and time from filename
+                dt_start = get_dt_from_filename(file)
+                logger.info('File datetime: %s', str(dt_start))
+                # Import individual records from file
                 logger.info('Importing records from: [%s]', str(os.path.join(folder, file)))
                 with open((os.path.join(folder, file)), newline='') as csvfile:
                     csvr = csv.reader(csvfile)
                     for row in csvr:
-                        logger.debug('Importing: %s', row)
-                        query = ("INSERT INTO run_log "
-                                 "(datetime, activitytype, distance, speed, calories, "
-                                 "lat, long, elev, heartrate) "
-                                 "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);")
-                        data = (
-                            row[0], row[1], row[3], row[4], row[5],
-                            row[6], row[7], row[8], row[9])
-                        logger.debug(query, data)
-                        cursor.execute(query, data)
+                        try:
+                            seconds = float(row[2])
+                            logger.debug('Row contains data, not header')
+                            logger.debug(
+                                'Importing row with timestamp: %s',
+                                str(datetime.datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S')))
+                            query = ("INSERT INTO run_log "
+                                     "(datetime, activitytype, distance, speed, calories, "
+                                     "latitude, longitude, elevation, heartrate) "
+                                     "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);")
+                            data = (
+                                str(datetime.datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S')),
+                                '0',
+                                str(float(row[8]) * 1609.34),
+                                str(float(row[12]) * 0.44704),
+                                row[17],
+                                row[5],
+                                row[6],
+                                row[7],
+                                'n/a')
+                            logger.debug(query % data)
+                            cursor.execute(query, data)
+                        except:
+                            pass
                 # Move file so it's not processed again
                 logger.info(
                     'Moving file [%s] to archive folder after processing',
@@ -84,3 +102,16 @@ def move_file(filename, source_dir, dest_dir, logger):
             logger.info('Successfully moved capture file')
     except:
         logger.warning('Oh crap, couldn\'t remove the requested file')
+
+
+def get_dt_from_filename(filename):
+    dt_regex = r'\b-([2][0][0-9][0-9])([0-1][0-9])([0-3][0-9])' \
+                        r'-([0-1][0-9])([0-6][0-9])\.'
+    dt_match = re.search(dt_regex, filename)
+    if dt_match is not None:
+        date = datetime.date(int(dt_match.group(1)), int(dt_match.group(2)), int(dt_match.group(3)))
+        time = datetime.time(int(dt_match.group(4)), int(dt_match.group(5)), 0)
+        dt = datetime.datetime.combine(date, time)
+    else:
+        dt = None
+    return dt
