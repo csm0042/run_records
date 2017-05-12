@@ -4,6 +4,7 @@
 
 # Import Required Libraries (Standard, Third Party, Local) ********************
 import asyncio
+import copy
 import datetime
 import csv
 import logging
@@ -32,6 +33,7 @@ async def import_runmeter_records(folder, database, logger):
     logger.info('Starting tomtom import script on folder: %s', folder)
     # Set up archive directory for processed files
     archive_dir = os.path.join(folder, "archive")
+    os.makedirs(archive_dir, exist_ok=True)
     logger.info('Setting up archive folder at: %s', archive_dir)
     # Search capture dir for capture files
     dir_contents = os.listdir(folder)
@@ -56,31 +58,80 @@ async def import_runmeter_records(folder, database, logger):
                 logger.info('Importing records from: [%s]', str(os.path.join(folder, file)))
                 with open((os.path.join(folder, file)), newline='') as csvfile:
                     csvr = csv.reader(csvfile)
-                    for row in csvr:
-                        try:
-                            seconds = float(row[2])
-                            logger.debug('Row contains data, not header')
+                    # Set default pointer values for field headers
+                    datetime_ptr = 0
+                    activitytyp_ptr = 99
+                    distance_ptr = 8
+                    speed_ptr = 12
+                    calories_ptr = 17
+                    latitude_ptr = 5
+                    longitude_ptr = 6
+                    elevation_ptr = 7
+                    heartrate_ptr = 99
+                    # Process rows in file
+                    for index, row in enumerate(csvr):
+                        if index == 0:
+                            for i, val in enumerate(row):
+                                if val.lower() == "time":
+                                    datetime_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found datetime at column [%s]', str(datetime_ptr))
+                                if val.lower() == "distance (miles)":
+                                    distance_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(distance_ptr))
+                                if val.lower() == "speed (mph)":
+                                    speed_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(speed_ptr))
+                                if val.lower() == "calories":
+                                    calories_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(calories_ptr))
+                                if val.lower() == "latitude":
+                                    latitude_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(latitude_ptr))
+                                if val.lower() == "longtude":
+                                    longitude_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(longitude_ptr))
+                                if val.lower() == "elevation":
+                                    elevation_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(elevation_ptr))
+                                if val.lower() == "heart rate (bpm)":
+                                    heartrate_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(heartrate_ptr))
+                        else:
                             logger.debug(
                                 'Importing row with timestamp: %s',
-                                str(datetime.datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S')))
+                                str(datetime.datetime.strptime(
+                                    row[datetime_ptr], '%Y-%m-%d %H:%M:%S')))
                             query = ("INSERT INTO run_log "
                                      "(datetime, activitytype, distance, speed, calories, "
                                      "latitude, longitude, elevation, heartrate) "
                                      "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);")
                             data = (
-                                str(datetime.datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S')),
+                                str(datetime.datetime.strptime(
+                                    row[datetime_ptr], '%Y-%m-%d %H:%M:%S')),
                                 '0',
-                                str(float(row[8]) * 1609.34),
-                                str(float(row[12]) * 0.44704),
-                                row[17],
-                                row[5],
-                                row[6],
-                                row[7],
-                                'n/a')
+                                str(float(row[distance_ptr]) * 1609.34),
+                                str(float(row[speed_ptr]) * 0.44704),
+                                row[calories_ptr],
+                                row[latitude_ptr],
+                                row[longitude_ptr],
+                                row[elevation_ptr],
+                                heartrate(heartrate_ptr, row)
+                                )
                             logger.debug(query % data)
-                            cursor.execute(query, data)
-                        except:
-                            pass
+                            try:
+                                cursor.execute(query, data)
+                            except:
+                                logger.warning(
+                                    'Could not execute query [%s]', (query % data))
+
                 # Move file so it's not processed again
                 logger.info(
                     'Moving file [%s] to archive folder after processing',
@@ -90,6 +141,12 @@ async def import_runmeter_records(folder, database, logger):
         database.commit()
         cursor.close()
 
+
+def heartrate(ptr, row):
+    if ptr != 99:
+        return row[ptr]
+    else:
+        return ""
 
 
 def move_file(filename, source_dir, dest_dir, logger):

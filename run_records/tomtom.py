@@ -4,6 +4,7 @@
 
 # Import Required Libraries (Standard, Third Party, Local) ********************
 import asyncio
+import copy
 import datetime
 import csv
 import os
@@ -31,6 +32,7 @@ async def import_tomtom_records(folder, database, logger):
     logger.info('Starting tomtom import script on folder: %s', folder)
     # Set up archive directory for processed files
     archive_dir = os.path.join(folder, "archive")
+    os.makedirs(archive_dir, exist_ok=True)
     logger.info('Setting up archive folder at: %s', archive_dir)
     # Search capture dir for capture files
     dir_contents = os.listdir(folder)
@@ -55,9 +57,58 @@ async def import_tomtom_records(folder, database, logger):
                 logger.info('Importing records from: [%s]', str(os.path.join(folder, file)))
                 with open((os.path.join(folder, file)), newline='') as csvfile:
                     csvr = csv.reader(csvfile)
-                    for row in csvr:
-                        try:
-                            seconds = int(row[0])
+                    # Set default pointer values for field headers
+                    datetime_ptr = 0
+                    activity_ptr = 99
+                    distance_ptr = 8
+                    speed_ptr = 12
+                    calories_ptr = 17
+                    latitude_ptr = 5
+                    longitude_ptr = 6
+                    elevation_ptr = 7
+                    heartrate_ptr = 99
+                    # Process rows in file
+                    for index, row in enumerate(csvr):
+                        if index == 0:
+                            for i, val in enumerate(row):
+                                if val.lower() == "time":
+                                    datetime_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found datetime at column [%s]', str(datetime_ptr))
+                                if val.lower() == "activitytype":
+                                    activity_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(activity_ptr))
+                                if val.lower() == "distance":
+                                    distance_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(distance_ptr))
+                                if val.lower() == "speed":
+                                    speed_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(speed_ptr))
+                                if val.lower() == "calories":
+                                    calories_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(calories_ptr))
+                                if val.lower() == "lat":
+                                    latitude_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(latitude_ptr))
+                                if val.lower() == "long":
+                                    longitude_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(longitude_ptr))
+                                if val.lower() == "elevation":
+                                    elevation_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(elevation_ptr))
+                                if val.lower() == "heartrate":
+                                    heartrate_ptr = copy.copy(i)
+                                    logger.debug(
+                                        'Found distance at column [%s]', str(heartrate_ptr))
+                        else:
+                            seconds = int(row[datetime_ptr])
                             logger.debug(
                                 'Importing row with timestamp: %s',
                                 str(dt_start + datetime.timedelta(seconds=int(seconds))))
@@ -67,18 +118,21 @@ async def import_tomtom_records(folder, database, logger):
                                      "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);")
                             data = (
                                 str(dt_start + datetime.timedelta(seconds=int(seconds))),
-                                row[1],
-                                row[3],
-                                row[4],
-                                row[5],
-                                row[6],
-                                row[7],
-                                row[8],
-                                row[9])
+                                row[activity_ptr],
+                                row[distance_ptr],
+                                row[speed_ptr],
+                                row[calories_ptr],
+                                row[latitude_ptr],
+                                row[longitude_ptr],
+                                row[elevation_ptr],
+                                row[heartrate_ptr])
                             logger.debug(query % data)
-                            cursor.execute(query, data)
-                        except:
-                            pass
+                            try:
+                                cursor.execute(query, data)
+                            except:
+                                logger.warning(
+                                    'Could not execute query [%s]', (query % data))
+
                 # Move file so it's not processed again
                 logger.info(
                     'Moving file [%s] to archive folder after processing',
@@ -104,7 +158,7 @@ def move_file(filename, source_dir, dest_dir, logger):
 
 def get_dt_from_filename(filename):
     dt_regex = r'\b-([2][0][0-9][0-9])([0-1][0-9])([0-3][0-9])' \
-                        r'T([0-1][0-9])([0-6][0-9])([0-6][0-9])\.'
+                        r'T([0-2][0-9])([0-6][0-9])([0-6][0-9])\.'
     dt_match = re.search(dt_regex, filename)
     if dt_match is not None:
         date = datetime.date(int(dt_match.group(1)), int(dt_match.group(2)), int(dt_match.group(3)))
